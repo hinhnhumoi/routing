@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(xargs wc -l)",
+      "Bash(python run_race_check.py)",
+      "Bash(cmd.exe /c start race_report_A.html)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python tools/run_race_check.py)",
+      "Bash(git init)",
+      "Bash(git add -A)",
+      "Bash(git commit -m \"Initial commit: routing project\")",
+      "Bash(git branch -M main)",
+      "Bash(git remote add origin https://github.com/hinhnhumoi/routing.git)",
+      "Bash(git push -u origin main)"
+    ]
+  }
+}
