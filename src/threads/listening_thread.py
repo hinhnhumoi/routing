@@ -66,10 +66,16 @@ class ListeningThread(threading.Thread):
     @staticmethod
     def _looks_like_update(message):
         """Check if message looks like a malformed update packet.
-        Detects messages with colon-separated neighbour data (ID:cost:port pattern).
+        Detects messages like 'UPD8 Source A:2.3:6000' - wrong keyword but update structure.
+        Only triggers if the first word is NOT a known command keyword.
         """
         parts = message.split()
         if len(parts) < 3:
+            return False
+        # Known command keywords — these should go through handle_command, not handle_update
+        known_commands = {"CHANGE", "FAIL", "RECOVER", "QUERY", "RESET",
+                          "BATCH", "CYCLE", "MERGE", "SPLIT", "SHOW"}
+        if parts[0].upper() in known_commands:
             return False
         # Check if the last part contains colon-separated entries like "A:2.3:6000"
         for entry in parts[-1].split(','):

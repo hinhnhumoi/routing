@@ -178,6 +178,10 @@ class CommandHandler:
         self.node.graph.update_edge(self.node.node_id, neighbour_id, new_cost)
         self.node._update_own_lsa()
 
+        # Immediately broadcast updated configuration
+        if hasattr(self.node, 'sending_thread'):
+            self.node.sending_thread.immediate_broadcast()
+
         # Trigger recalculation
         if hasattr(self.node, 'routing_thread'):
             self.node.routing_thread.trigger_recalculation()
@@ -234,7 +238,8 @@ class CommandHandler:
         table = self.node.graph.compute_routing_table(self.node.node_id)
         for d, path, cost in table:
             if d == dest:
-                self._print(f"Least cost path from {self.node.node_id} to {dest}: {path}, link cost: {cost:g}")
+                cost_str = f"{cost}" if cost != int(cost) else f"{cost:.1f}"
+                self._print(f"Least cost path from {self.node.node_id} to {dest}: {path}, link cost: {cost_str}")
                 return
         self._print(f"Least cost path from {self.node.node_id} to {dest}: not reachable")
 
@@ -253,7 +258,8 @@ class CommandHandler:
         table = self.node.graph.compute_routing_table(source)
         for d, path, cost in table:
             if d == dest:
-                self._print(f"Least cost path from {source} to {dest}: {path}, link cost: {cost:g}")
+                cost_str = f"{cost}" if cost != int(cost) else f"{cost:.1f}"
+                self._print(f"Least cost path from {source} to {dest}: {path}, link cost: {cost_str}")
                 return
         self._print(f"Least cost path from {source} to {dest}: not reachable")
 
@@ -272,6 +278,10 @@ class CommandHandler:
         self.node.merged_nodes = set()
         self.node.lsa_db = {}
         self.node._update_own_lsa()
+
+        # Immediately broadcast new update packet
+        if hasattr(self.node, 'sending_thread'):
+            self.node.sending_thread.immediate_broadcast()
 
         self._print(f"Node {self.node.node_id} has been reset.")
 

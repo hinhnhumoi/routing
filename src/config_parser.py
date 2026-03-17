@@ -10,7 +10,7 @@ def parse_args(argv):
     Returns: (node_id, port, config_file, routing_delay, update_interval)
     """
     if len(argv) < 6:
-        print("Error: Insufficient arguments provided. Usage: ./Routing.sh <Node-ID> <Port-NO> <Node-Config-File> <RoutingDelay> <UpdateInterval>")
+        print("Error: Insufficient arguments provided. Usage: ./Routing.sh <Node-ID> <Port-NO> <Node-Config-File>")
         sys.exit(1)
 
     node_id = argv[1]

@@ -42,7 +42,7 @@ class RoutingThread(threading.Thread):
         """Output the routing table in the required format."""
         lines = [f"I am Node {self.node.node_id}"]
         for dest, path, cost in table:
-            cost_str = f"{cost:g}"
+            cost_str = f"{cost}" if cost != int(cost) else f"{cost:.1f}"
             lines.append(f"Least cost path from {self.node.node_id} to {dest}: {path}, link cost: {cost_str}")
         output = "\n".join(lines)
         with self.node.print_lock:

@@ -56,6 +56,12 @@ class SendingThread(threading.Thread):
                 except Exception:
                     pass
 
+    def immediate_broadcast(self):
+        """Immediately broadcast UPDATE to STDOUT and flood LSAs via sockets.
+        Called directly from command handlers (CHANGE, RESET) — not from the periodic loop.
+        """
+        self._send_update()
+
     def flood_lsa(self, origin, lsa, exclude_port=None):
         """Forward a single LSA to all neighbours except the sender."""
         with self.node.lock:
