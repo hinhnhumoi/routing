@@ -335,6 +335,21 @@ class CommandHandler:
             del graph.adjacency[node1][node2]
 
         # Update local neighbours if needed
+        # If this node is node1, absorb node2's neighbours into our own
+        if self.node.node_id == node1:
+            # Add node2's former neighbours (from graph) as our direct neighbours
+            if node1 in graph.adjacency:
+                for nb, cost in graph.adjacency[node1].items():
+                    if nb == node2:
+                        continue
+                    if nb not in self.node.neighbours:
+                        # Determine port from port_map or existing neighbour info
+                        port = graph.port_map.get(nb, 6000)
+                        self.node.neighbours[nb] = {'cost': cost, 'port': port}
+                    else:
+                        # Keep lower cost
+                        if cost < self.node.neighbours[nb]['cost']:
+                            self.node.neighbours[nb]['cost'] = cost
         if node2 in self.node.neighbours:
             del self.node.neighbours[node2]
 
