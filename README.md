@@ -109,70 +109,55 @@ All reads and writes to shared state (`neighbours`, `graph`, `is_down`, `last_he
 - **Failure Detection**: If no UPDATE is received from a neighbour within `3 × UpdateInterval`, the node is marked as failed.
 
 
-Cách dùng Race Detector
-Cách 1: Chạy luôn script có sẵn (nhanh nhất)
+## Race Condition Detector
 
-cd c:\Users\ext_daothanh\learning\routing\tools
+The project includes a built-in race detector tool that instruments lock usage and shared state accesses, then generates interactive HTML reports.
+
+### Quick Start
+
+```bash
+cd tools
 python run_race_check.py
-Script sẽ tự động:
+```
 
-Tạo 3 node A, B, C kết nối thành tam giác
-Bắn các lệnh CHANGE, FAIL, RECOVER, QUERY đồng thời từ nhiều thread
-Đợi vài giây cho UPDATE lan truyền
-Xuất ra 3 file HTML report
-Sau khi chạy xong, mở file report:
+The script automatically:
+1. Creates a 3-node triangle network (A, B, C)
+2. Fires concurrent commands (CHANGE, FAIL, RECOVER, QUERY, MERGE, SPLIT, CYCLE DETECT) from multiple threads
+3. Waits for UPDATE propagation
+4. Generates HTML reports per node
 
-
+Open a report:
+```bash
 start race_report_A.html
-Cách 2: Tích hợp vào code của bạn
-Nếu muốn test một scenario cụ thể, thêm vào đầu main.py:
+```
 
+### Manual Integration
 
+To test a specific scenario, add to your code:
+
+```python
 from race_detector import RaceDetector
 
-# Sau khi tạo node:
 detector = RaceDetector()
 node.lock = detector.wrap_lock(node.lock, "node.lock")
-detector.watch(node, 'neighbours', 'is_down', 'lsa_db', 'lsa_seq', 
+detector.watch(node, 'neighbours', 'is_down', 'lsa_db', 'lsa_seq',
                'merged_nodes', 'my_partition')
 
-# ... node chạy bình thường ...
-
-# Khi muốn xuất report (ví dụ bắt Ctrl+C):
+# Export report on exit:
 import signal
 def on_exit(sig, frame):
     detector.dump_html("race_report.html")
     sys.exit(0)
 signal.signal(signal.SIGINT, on_exit)
-Cách đọc HTML report
-Mở report trong browser, có 3 tab:
+```
 
-Tab Timeline - đồ thị theo thời gian:
+### Reading the HTML Report
 
+The report has 3 tabs:
 
-Thread-1 (socket)   ●●■●●●■●●      ← mỗi dot là 1 event
-Thread-2 (sending)  ◆  ●◆  ●◆      ← hover để xem chi tiết
-Thread-3 (routing)  ◆●◆  ◆●◆
-
-◆ xanh = Lock acquire          ◆ xám = Lock release
-● vàng = READ không lock        ■ đỏ  = WRITE không lock  
-◆ tím  = Thread bị blocked chờ lock
-Tab Violations - bảng tổng hợp attribute nào bị access không lock nhiều nhất
-
-Tab Event Log - danh sách chi tiết từng event, có filter
-
-
-routing (dự án hiện tại) - 31 race conditions, 7 CRITICAL
-Vấn đề nghiêm trọng hơn nhiều - hầu hết command handlers chạy hoàn toàn KHÔNG có lock:
-
-Mức độ	Vấn đề	Vị trí
-CRITICAL	_handle_reset() thay đổi 6 fields không lock	command_handler.py
-CRITICAL	_handle_merge() sửa lsa_db, neighbours, merged_nodes không lock	command_handler.py
-CRITICAL	_handle_split() sửa lsa_db, my_partition không lock	command_handler.py
-CRITICAL	get_active_adjacency() iterate dict trong khi thread khác modify	graph.py
-CRITICAL	dijkstra() đọc adjacency không lock	graph.py
-HIGH	_handle_change() sửa neighbours không lock	command_handler.py
-HIGH	_handle_fail/recover() sửa is_down không lock	command_handler.py
-HIGH	_update_own_lsa() sửa lsa_seq, lsa_db không lock	node.py
-MEDIUM	Print output interleave ở mọi thread	Tất cả threads
-Đặc điểm: Lock gần như không được dùng trong command handlers. Đây là race condition ở mức dictionary iteration concurrent modification - có thể crash chương trình.
+- **Timeline** - Visual timeline of thread events (hover for details)
+  - Green = Lock acquire, Grey = Lock release
+  - Yellow = READ without lock, Red = WRITE without lock
+  - Purple = Thread blocked waiting for lock
+- **Violations** - Summary table of unprotected accesses by attribute
+- **Event Log** - Chronological list of all events with filters
