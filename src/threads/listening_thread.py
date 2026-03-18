@@ -57,6 +57,9 @@ class ListeningThread(threading.Thread):
                 if len(parts) >= 2:
                     self.node.record_heartbeat(parts[1])
                 self.command_handler.handle_update(message)
+            elif message.strip() == "SPLIT" and from_port is not None:
+                # SPLIT received via socket from another node
+                self.command_handler._handle_split(["SPLIT"], from_port=from_port)
             elif self._looks_like_update(message):
                 # Malformed update packet (e.g. "UPD8 Source A:2.3:6000")
                 self.command_handler.handle_update(message)

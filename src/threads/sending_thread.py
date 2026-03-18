@@ -78,6 +78,22 @@ class SendingThread(threading.Thread):
             except Exception:
                 pass
 
+    def flood_command(self, command, exclude_port=None):
+        """Flood a command string to all neighbours via UDP."""
+        with self.node.lock:
+            if self.node.is_down:
+                return
+            neighbours = dict(self.node.neighbours)
+
+        msg = command.encode('utf-8')
+        for nb_id, info in neighbours.items():
+            if info['port'] == exclude_port:
+                continue
+            try:
+                self.sock.sendto(msg, ('localhost', info['port']))
+            except Exception:
+                pass
+
     @staticmethod
     def _encode_lsa(origin, lsa):
         """Encode LSA to string: LSA <origin> <seq> <nb1>:<cost>,<nb2>:<cost>,..."""

@@ -416,11 +416,20 @@ class CommandHandler:
         if hasattr(self.node, 'routing_thread'):
             self.node.routing_thread.trigger_recalculation()
 
-    def _handle_split(self, tokens):
+    def _handle_split(self, tokens, from_port=None):
         """SPLIT (Bonus)"""
         if len(tokens) != 1:
             self._print("Error: Invalid command format. Expected exactly: SPLIT.")
             _fatal_exit(1)
+
+        # Guard: don't process SPLIT twice
+        if self.node.my_partition is not None:
+            return
+
+        # Flood SPLIT to all neighbours BEFORE modifying anything,
+        # so peers that haven't received it yet can also split.
+        if hasattr(self.node, 'sending_thread'):
+            self.node.sending_thread.flood_command("SPLIT", exclude_port=from_port)
 
         graph = self.node.graph
         all_nodes = sorted(graph.get_all_nodes() - graph.failed_nodes)
@@ -428,17 +437,10 @@ class CommandHandler:
         v1 = set(all_nodes[:k])
         v2 = set(all_nodes[k:])
 
-        # Remove all edges between V1 and V2
-        for node in v1:
-            if node in graph.adjacency:
-                for nb in list(graph.adjacency[node].keys()):
-                    if nb in v2:
-                        del graph.adjacency[node][nb]
-                        if node in graph.adjacency.get(nb, {}):
-                            del graph.adjacency[nb][node]
-
-        # Update local neighbours
         my_partition = v1 if self.node.node_id in v1 else v2
+        self.node.my_partition = my_partition
+
+        # Update local neighbours — remove cross-partition peers
         for nb_id in list(self.node.neighbours.keys()):
             if nb_id not in my_partition:
                 del self.node.neighbours[nb_id]
@@ -453,10 +455,18 @@ class CommandHandler:
                     nb: cost for nb, cost in lsa['neighbours'].items()
                     if nb in my_partition
                 }
-        self.node.my_partition = my_partition
         self.node._update_own_lsa()
 
-        # Immediately broadcast updated LSA so neighbours in same partition get new topology
+        # Remove all edges between V1 and V2
+        for node in v1:
+            if node in graph.adjacency:
+                for nb in list(graph.adjacency[node].keys()):
+                    if nb in v2:
+                        del graph.adjacency[node][nb]
+                        if node in graph.adjacency.get(nb, {}):
+                            del graph.adjacency[nb][node]
+
+        # Broadcast updated topology to neighbours in same partition
         if hasattr(self.node, 'sending_thread'):
             self.node.sending_thread.immediate_broadcast()
 
