@@ -9,6 +9,13 @@ from config_parser import parse_config
 from graph import Graph
 
 
+def _fatal_exit(code=1):
+    """Exit the entire process immediately, even from non-main threads."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
+
+
 class CommandHandler:
     def __init__(self, node):
         self.node = node
@@ -76,9 +83,14 @@ class CommandHandler:
         parts = message.split()
         if len(parts) < 3 or parts[0] != "UPDATE":
             self._print("Error: Invalid update packet format.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         source = parts[1]
+
+        # After SPLIT, ignore UPDATEs from nodes outside my partition
+        if self.node.my_partition is not None and source not in self.node.my_partition:
+            return
+
         neighbour_data = parts[2]
 
         # Parse neighbour entries: N1:Cost1:Port1,N2:Cost2:Port2,...
@@ -87,14 +99,18 @@ class CommandHandler:
             tokens = entry.split(':')
             if len(tokens) != 3:
                 self._print("Error: Invalid update packet format.")
-                sys.exit(1)
+                _fatal_exit(1)
             nb_id = tokens[0]
             try:
                 cost = float(tokens[1])
                 port = int(tokens[2])
             except ValueError:
                 self._print("Error: Invalid update packet format.")
-                sys.exit(1)
+                _fatal_exit(1)
+
+            # After SPLIT, skip edges to nodes outside my partition
+            if self.node.my_partition is not None and nb_id not in self.node.my_partition:
+                continue
 
             # Update graph with learned edges
             self.node.graph.update_edge(source, nb_id, cost)
@@ -134,13 +150,13 @@ class CommandHandler:
                 self._handle_batch_update(tokens)
             else:
                 self._print("Error: Invalid command format.")
-                sys.exit(1)
+                _fatal_exit(1)
         elif cmd == "CYCLE":
             if len(tokens) >= 2 and tokens[1] == "DETECT":
                 self._handle_cycle_detect(tokens)
             else:
                 self._print("Error: Invalid command format.")
-                sys.exit(1)
+                _fatal_exit(1)
         elif cmd == "MERGE":
             self._handle_merge(tokens)
         elif cmd == "SPLIT":
@@ -150,7 +166,7 @@ class CommandHandler:
             return
         else:
             self._print("Error: Invalid command format.")
-            sys.exit(1)
+            _fatal_exit(1)
 
     def _is_valid_node_id(self, node_id):
         """Check if node_id is a single uppercase letter."""
@@ -163,14 +179,14 @@ class CommandHandler:
                 self._print("Error: Invalid command format. Expected exactly two tokens after CHANGE.")
             else:
                 self._print("Error: Invalid command format. Expected numeric cost value.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         neighbour_id = tokens[1]
         try:
             new_cost = float(tokens[2])
         except ValueError:
             self._print("Error: Invalid command format. Expected numeric cost value.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         # Update local neighbour cost
         if neighbour_id in self.node.neighbours:
@@ -190,12 +206,12 @@ class CommandHandler:
         """FAIL <Node-ID>"""
         if len(tokens) != 2:
             self._print("Error: Invalid command format. Expected: FAIL <Node-ID>.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         node_id = tokens[1]
         if not self._is_valid_node_id(node_id):
             self._print("Error: Invalid command format. Expected a valid Node-ID.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         if node_id == self.node.node_id:
             self.node.is_down = True
@@ -209,12 +225,12 @@ class CommandHandler:
         """RECOVER <Node-ID>"""
         if len(tokens) != 2:
             self._print("Error: Invalid command format. Expected: RECOVER <Node-ID>.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         node_id = tokens[1]
         if not self._is_valid_node_id(node_id):
             self._print("Error: Invalid command format. Expected a valid Node-ID.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         if node_id == self.node.node_id:
             self.node.is_down = False
@@ -228,12 +244,12 @@ class CommandHandler:
         """QUERY <Destination>"""
         if len(tokens) != 2:
             self._print("Error: Invalid command format. Expected a valid Destination.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         dest = tokens[1]
         if not self._is_valid_node_id(dest):
             self._print("Error: Invalid command format. Expected a valid Destination.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         table = self.node.graph.compute_routing_table(self.node.node_id)
         for d, path, cost in table:
@@ -247,13 +263,13 @@ class CommandHandler:
         """QUERY PATH <Source> <Destination>"""
         if len(tokens) != 4:
             self._print("Error: Invalid command format. Expected two valid identifiers for Source and Destination.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         source = tokens[2]
         dest = tokens[3]
         if not self._is_valid_node_id(source) or not self._is_valid_node_id(dest):
             self._print("Error: Invalid command format. Expected two valid identifiers for Source and Destination.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         table = self.node.graph.compute_routing_table(source)
         for d, path, cost in table:
@@ -267,7 +283,7 @@ class CommandHandler:
         """RESET"""
         if len(tokens) != 1:
             self._print("Error: Invalid command format. Expected exactly: RESET.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         # Reload original config
         neighbours, _ = parse_config(self.node.config_file)
@@ -293,12 +309,12 @@ class CommandHandler:
         """BATCH UPDATE <Filename>"""
         if len(tokens) != 3:
             self._print("Error: Invalid command format. Expected: BATCH UPDATE <Filename>.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         filename = tokens[2]
         if not os.path.exists(filename):
             self._print(f"Error: File {filename} not found.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         with open(filename, 'r') as f:
             commands = [line.strip() for line in f.readlines() if line.strip()]
@@ -316,13 +332,13 @@ class CommandHandler:
         """MERGE <Node-ID1> <Node-ID2> (Bonus)"""
         if len(tokens) != 3:
             self._print("Error: Invalid command format. Expected two valid identifiers for MERGE.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         node1 = tokens[1]
         node2 = tokens[2]
         if not self._is_valid_node_id(node1) or not self._is_valid_node_id(node2):
             self._print("Error: Invalid command format. Expected two valid identifiers for MERGE.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         graph = self.node.graph
         # Transfer all edges from node2 to node1
@@ -390,7 +406,7 @@ class CommandHandler:
         """SPLIT (Bonus)"""
         if len(tokens) != 1:
             self._print("Error: Invalid command format. Expected exactly: SPLIT.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         graph = self.node.graph
         all_nodes = sorted(graph.get_all_nodes() - graph.failed_nodes)
@@ -426,6 +442,10 @@ class CommandHandler:
         self.node.my_partition = my_partition
         self.node._update_own_lsa()
 
+        # Immediately broadcast updated LSA so neighbours in same partition get new topology
+        if hasattr(self.node, 'sending_thread'):
+            self.node.sending_thread.immediate_broadcast()
+
         self._print("Graph partitioned successfully.")
         if hasattr(self.node, 'routing_thread'):
             self.node.routing_thread.trigger_recalculation()
@@ -434,7 +454,7 @@ class CommandHandler:
         """CYCLE DETECT (Bonus)"""
         if len(tokens) != 2:
             self._print("Error: Invalid command format. Expected exactly: CYCLE DETECT.")
-            sys.exit(1)
+            _fatal_exit(1)
 
         if self.node.graph.detect_cycle():
             self._print("Cycle detected.")
