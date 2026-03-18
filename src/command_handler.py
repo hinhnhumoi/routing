@@ -94,6 +94,7 @@ class CommandHandler:
         neighbour_data = parts[2]
 
         # Parse neighbour entries: N1:Cost1:Port1,N2:Cost2:Port2,...
+        new_neighbours = {}
         entries = neighbour_data.split(',')
         for entry in entries:
             tokens = entry.split(':')
@@ -112,9 +113,22 @@ class CommandHandler:
             if self.node.my_partition is not None and nb_id not in self.node.my_partition:
                 continue
 
-            # Update graph with learned edges
-            self.node.graph.update_edge(source, nb_id, cost)
-            self.node.graph.port_map[nb_id] = port
+            new_neighbours[nb_id] = (cost, port)
+
+        # Remove old edges from source that are no longer in the UPDATE
+        graph = self.node.graph
+        if source in graph.adjacency:
+            old_nbs = set(graph.adjacency[source].keys())
+            for old_nb in old_nbs:
+                if old_nb not in new_neighbours:
+                    del graph.adjacency[source][old_nb]
+                    if old_nb in graph.adjacency and source in graph.adjacency[old_nb]:
+                        del graph.adjacency[old_nb][source]
+
+        # Add/update current edges
+        for nb_id, (cost, port) in new_neighbours.items():
+            graph.update_edge(source, nb_id, cost)
+            graph.port_map[nb_id] = port
 
         # Trigger routing recalculation
         if hasattr(self.node, 'routing_thread'):
